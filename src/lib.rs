@@ -6,7 +6,7 @@ use serde::{
     de::{self, Deserialize, Deserializer, MapAccess, Unexpected, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
-use std::fmt;
+use std::{fmt, slice};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct Value {
@@ -50,6 +50,10 @@ pub struct Leaf {
 impl Value {
     pub fn new(document: Document) -> Value {
         Value { document }
+    }
+
+    pub fn leafs(&self) -> Leafs {
+        Leafs::new(self)
     }
 }
 
@@ -267,6 +271,104 @@ impl<'de> Deserialize<'de> for Node {
     }
 }
 
+pub struct Leafs<'a> {
+    iter_tree_iter: IterTreeIter<'a>,
+    curr_leaf_iter: Option<slice::Iter<'a, Leaf>>,
+}
+
+impl<'a> Leafs<'a> {
+    pub fn new(value: &'a Value) -> Leafs<'a> {
+        Leafs {
+            iter_tree_iter: IterTreeIter::new(value.document.nodes.iter()),
+            curr_leaf_iter: None,
+        }
+    }
+
+    fn next_from_curr_leaf(&mut self) -> Option<&'a str> {
+        self.curr_leaf_iter
+            .as_mut()
+            .and_then(|leaf_iter| leaf_iter.next())
+            .map(|leaf| leaf.text.as_str())
+    }
+
+    fn next_from_node(&mut self) -> Option<&'a str> {
+        self.curr_leaf_iter = self.iter_tree_iter.next();
+        if self.curr_leaf_iter.is_none() {
+            return None;
+        }
+
+        self.next_from_curr_leaf()
+    }
+}
+
+impl<'a> Iterator for Leafs<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        self.next_from_curr_leaf().or_else(|| self.next_from_node())
+    }
+}
+
+struct IterTreeIter<'a> {
+    iter_tree: Option<IterTree<'a>>,
+}
+
+struct IterTree<'a> {
+    parent_iter: Option<Box<IterTree<'a>>>,
+    curr_iter: slice::Iter<'a, Node>,
+}
+
+impl<'a> IterTreeIter<'a> {
+    fn new(curr_iter: slice::Iter<'a, Node>) -> IterTreeIter<'a> {
+        IterTreeIter {
+            iter_tree: Some(IterTree {
+                parent_iter: None,
+                curr_iter,
+            }),
+        }
+    }
+
+    fn next_from_curr(&mut self) -> Option<slice::Iter<'a, Leaf>> {
+        let node_iter = match self.iter_tree.as_mut()?.curr_iter.next()? {
+            Node::Document(document) => document.nodes.iter(),
+            Node::Block(block) => block.nodes.iter(),
+            Node::Inline(inline) => inline.nodes.iter(),
+            Node::Text(text) => return Some(text.leaves.iter()),
+        };
+
+        self.push_child_iter(node_iter);
+
+        self.next_from_curr()
+    }
+
+    fn next_from_parent(&mut self) -> Option<slice::Iter<'a, Leaf>> {
+        let parent_iter = *self.iter_tree.take()?.parent_iter?;
+        self.iter_tree = Some(parent_iter);
+        if self.iter_tree.is_none() {
+            return None;
+        }
+
+        self.next_from_curr()
+    }
+
+    fn push_child_iter(&mut self, child_iter: slice::Iter<'a, Node>) {
+        let parent_iter_tree = self.iter_tree.take().map(Box::new);
+        let new_iter_tree = IterTree {
+            parent_iter: parent_iter_tree,
+            curr_iter: child_iter,
+        };
+        self.iter_tree = Some(new_iter_tree);
+    }
+}
+
+impl<'a> Iterator for IterTreeIter<'a> {
+    type Item = slice::Iter<'a, Leaf>;
+
+    fn next(&mut self) -> Option<slice::Iter<'a, Leaf>> {
+        self.next_from_curr().or_else(|| self.next_from_parent())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate serde_json;
@@ -289,7 +391,6 @@ mod tests {
         }
 
         let value1 = Value::new(document);
-        println!("value1: {:?}", value1);
 
         let value1_json = serde_json::to_string(&value1).unwrap();
         assert_eq!(value1_json, r#"{"object":"value","document":{"object":"document","nodes":[{"object":"block","nodes":[{"object":"text","leaves":[{"object":"leaf","text":"sss"}]}]}]}}"#);
@@ -297,5 +398,57 @@ mod tests {
         let value2: Value = serde_json::from_str(&value1_json).unwrap();
         let value2_json = serde_json::to_string(&value2).unwrap();
         assert_eq!(value1_json, value2_json);
+    }
+
+    #[test]
+    pub fn smoke_visit_leafs() {
+        let mut document = Document::default();
+        {
+            {
+                let mut block = Block::default();
+                {
+                    let mut text = Text::default();
+                    text.add_leaf(Leaf::new("leaf 1".into()));
+                    text.add_leaf(Leaf::new("leaf 2".into()));
+                    block.add_node(Node::Text(text));
+                }
+                document.add_node(Node::Block(block));
+            }
+            {
+                let mut block = Block::default();
+                {
+                    let mut text = Text::default();
+                    text.add_leaf(Leaf::new("leaf 3".into()));
+                    text.add_leaf(Leaf::new("leaf 4".into()));
+                    block.add_node(Node::Text(text));
+                }
+                document.add_node(Node::Block(block))
+            }
+            {
+                let mut block = Block::default();
+                {
+                    let mut block_inner = Block::default();
+                    {
+                        let mut text = Text::default();
+                        text.add_leaf(Leaf::new("leaf 5".into()));
+                        text.add_leaf(Leaf::new("leaf 6".into()));
+                        block_inner.add_node(Node::Text(text));
+                    }
+                    block.add_node(Node::Block(block_inner));
+                }
+                document.add_node(Node::Block(block))
+            }
+        }
+        let value = Value::new(document);
+        let mut leafs = value.leafs();
+
+        assert_eq!(Some("leaf 1"), leafs.next());
+        assert_eq!(Some("leaf 2"), leafs.next());
+        assert_eq!(Some("leaf 3"), leafs.next());
+        assert_eq!(Some("leaf 4"), leafs.next());
+        assert_eq!(Some("leaf 5"), leafs.next());
+        assert_eq!(Some("leaf 6"), leafs.next());
+        assert_eq!(None, leafs.next());
+        assert_eq!(None, leafs.next());
     }
 }
