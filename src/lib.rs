@@ -293,9 +293,7 @@ impl<'a> Leafs<'a> {
 
     fn next_from_node(&mut self) -> Option<&'a str> {
         self.curr_leaf_iter = self.iter_tree_iter.next();
-        if self.curr_leaf_iter.is_none() {
-            return None;
-        }
+        self.curr_leaf_iter.as_ref()?;
 
         self.next_from_curr_leaf()
     }
@@ -342,10 +340,14 @@ impl<'a> IterTreeIter<'a> {
     }
 
     fn next_from_parent(&mut self) -> Option<slice::Iter<'a, Leaf>> {
-        let parent_iter = *self.iter_tree.take()?.parent_iter?;
-        self.iter_tree = Some(parent_iter);
-        if self.iter_tree.is_none() {
-            return None;
+        match self.iter_tree.take()?.parent_iter {
+            Some(parent_iter) => {
+                self.iter_tree = Some(*parent_iter);
+            }
+            None => {
+                self.iter_tree = None;
+                return None;
+            }
         }
 
         self.next_from_curr()
