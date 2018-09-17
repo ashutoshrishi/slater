@@ -27,17 +27,17 @@ pub enum Node {
     Text(Text),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Block {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Inline {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Text {
     pub leaves: Vec<Leaf>,
 }
@@ -54,40 +54,24 @@ impl Value {
 }
 
 impl Document {
-    pub fn new() -> Document {
-        Document { nodes: Vec::new() }
-    }
-
     pub fn add_node(&mut self, node: Node) {
         self.nodes.push(node);
     }
 }
 
 impl Block {
-    pub fn new() -> Block {
-        Block { nodes: Vec::new() }
-    }
-
     pub fn add_node(&mut self, node: Node) {
         self.nodes.push(node);
     }
 }
 
 impl Inline {
-    pub fn new() -> Inline {
-        Inline { nodes: Vec::new() }
-    }
-
     pub fn add_node(&mut self, node: Node) {
         self.nodes.push(node);
     }
 }
 
 impl Text {
-    pub fn new() -> Text {
-        Text { leaves: Vec::new() }
-    }
-
     pub fn add_leaf(&mut self, leaf: Leaf) {
         self.leaves.push(leaf);
     }
@@ -273,12 +257,12 @@ impl<'de> Deserialize<'de> for Node {
                         let text = Text { leaves };
                         Ok(Node::Text(text))
                     }
-                    _ => return Err(de::Error::invalid_type(Unexpected::Str(&object), &self)),
+                    _ => Err(de::Error::invalid_type(Unexpected::Str(&object), &self)),
                 }
             }
         }
 
-        const FIELDS: &'static [&'static str] = &["object", "nodes", "leaves"];
+        const FIELDS: &[&str] = &["object", "nodes", "leaves"];
         deserializer.deserialize_struct("Node", FIELDS, StructVisitor)
     }
 }
@@ -290,11 +274,11 @@ mod tests {
 
     #[test]
     pub fn smoke_test() {
-        let mut document = Document::new();
+        let mut document = Document::default();
         {
-            let mut block = Block::new();
+            let mut block = Block::default();
             {
-                let mut text = Text::new();
+                let mut text = Text::default();
                 {
                     let leaf = Leaf::new("sss".into());
                     text.add_leaf(leaf);
