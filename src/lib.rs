@@ -3,7 +3,7 @@ extern crate serde;
 extern crate serde_derive;
 
 use serde::{
-    de::{self, Deserialize, Deserializer, MapAccess, Unexpected, Visitor},
+    de::{self, Deserialize, Deserializer, MapAccess, Visitor},
     ser::{Serialize, SerializeStruct, Serializer},
 };
 use std::{fmt, slice};
@@ -25,6 +25,7 @@ pub enum Node {
     Block(Block),
     Inline(Inline),
     Text(Text),
+    Unknown(String),
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -168,6 +169,7 @@ impl<'de> Deserialize<'de> for Node {
             Object,
             Nodes,
             Leaves,
+            Unknown,
         };
 
         impl<'de> Deserialize<'de> for Field {
@@ -192,7 +194,7 @@ impl<'de> Deserialize<'de> for Node {
                             "object" => Ok(Field::Object),
                             "nodes" => Ok(Field::Nodes),
                             "leaves" => Ok(Field::Leaves),
-                            _ => Err(de::Error::unknown_field(value, FIELDS)),
+                            _ => Ok(Field::Unknown),
                         }
                     }
                 }
@@ -237,6 +239,7 @@ impl<'de> Deserialize<'de> for Node {
                             }
                             leaves = Some(map.next_value()?);
                         }
+                        Field::Unknown => {}
                     }
                 }
                 let object: String = object.ok_or_else(|| de::Error::missing_field("object"))?;
@@ -261,7 +264,7 @@ impl<'de> Deserialize<'de> for Node {
                         let text = Text { leaves };
                         Ok(Node::Text(text))
                     }
-                    _ => Err(de::Error::invalid_type(Unexpected::Str(&object), &self)),
+                    _ => Ok(Node::Unknown(object)),
                 }
             }
         }
@@ -332,6 +335,7 @@ impl<'a> IterTreeIter<'a> {
             Node::Block(block) => block.nodes.iter(),
             Node::Inline(inline) => inline.nodes.iter(),
             Node::Text(text) => return Some(text.leaves.iter()),
+            Node::Unknown(_) => return None,
         };
 
         self.push_child_iter(node_iter);
