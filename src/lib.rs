@@ -1,6 +1,7 @@
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 
 use serde::{
     de::{self, Deserialize, Deserializer, MapAccess, Visitor},
@@ -165,6 +166,7 @@ impl<'de> Deserialize<'de> for Node {
     where
         D: Deserializer<'de>,
     {
+        #[derive(Debug)]
         enum Field {
             Object,
             Nodes,
@@ -177,6 +179,7 @@ impl<'de> Deserialize<'de> for Node {
             where
                 D: Deserializer<'de>,
             {
+                #[derive(Debug)]
                 struct FieldVisitor;
 
                 impl<'de> Visitor<'de> for FieldVisitor {
@@ -190,6 +193,8 @@ impl<'de> Deserialize<'de> for Node {
                     where
                         E: de::Error,
                     {
+                        println!("visit_str: {}", value);
+
                         match value {
                             "object" => Ok(Field::Object),
                             "nodes" => Ok(Field::Nodes),
@@ -203,6 +208,7 @@ impl<'de> Deserialize<'de> for Node {
             }
         }
 
+        #[derive(Debug)]
         struct StructVisitor;
 
         impl<'de> Visitor<'de> for StructVisitor {
@@ -220,6 +226,7 @@ impl<'de> Deserialize<'de> for Node {
                 let mut nodes = None;
                 let mut leaves = None;
                 while let Some(key) = map.next_key()? {
+                    println!("key: {:?}", key);
                     match key {
                         Field::Object => {
                             if object.is_some() {
@@ -239,10 +246,13 @@ impl<'de> Deserialize<'de> for Node {
                             }
                             leaves = Some(map.next_value()?);
                         }
-                        Field::Unknown => {}
+                        Field::Unknown => {
+                            let _: serde_json::Value = map.next_value()?;
+                        }
                     }
                 }
                 let object: String = object.ok_or_else(|| de::Error::missing_field("object"))?;
+                println!("object: {:?}", object);
                 match object.as_str() {
                     "document" => {
                         let nodes = nodes.ok_or_else(|| de::Error::missing_field("nodes"))?;
@@ -379,6 +389,206 @@ impl<'a> Iterator for IterTreeIter<'a> {
 mod tests {
     extern crate serde_json;
     use super::*;
+
+    #[test]
+    fn debug_test() {
+        let text = r#"{
+  "object": "value",
+  "document": {
+    "object": "document",
+    "data": {},
+    "nodes": [
+      {
+        "object": "block",
+        "type": "paragraph",
+        "data": {},
+        "nodes": [
+          {
+            "object": "text",
+            "leaves": [
+              {
+                "object": "leaf",
+                "text": "a",
+                "marks": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "object": "block",
+        "type": "paragraph",
+        "data": {},
+        "nodes": [
+          {
+            "object": "text",
+            "leaves": [
+              {
+                "object": "leaf",
+                "text": "",
+                "marks": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "object": "block",
+        "type": "bulleted-list",
+        "data": {},
+        "nodes": [
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "a",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "b",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "c",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "object": "block",
+        "type": "paragraph",
+        "data": {},
+        "nodes": [
+          {
+            "object": "text",
+            "leaves": [
+              {
+                "object": "leaf",
+                "text": "",
+                "marks": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "object": "block",
+        "type": "paragraph",
+        "data": {},
+        "nodes": [
+          {
+            "object": "text",
+            "leaves": [
+              {
+                "object": "leaf",
+                "text": "d",
+                "marks": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "object": "block",
+        "type": "numbered-list",
+        "data": {},
+        "nodes": [
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "e",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "f",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "object": "block",
+            "type": "list-item",
+            "data": {},
+            "nodes": [
+              {
+                "object": "text",
+                "leaves": [
+                  {
+                    "object": "leaf",
+                    "text": "g",
+                    "marks": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}"#;
+
+        let value: Result<Value, _> = serde_json::from_str(text);
+        assert!(value.is_ok());
+    }
 
     #[test]
     pub fn smoke_test() {
