@@ -193,8 +193,6 @@ impl<'de> Deserialize<'de> for Node {
                     where
                         E: de::Error,
                     {
-                        println!("visit_str: {}", value);
-
                         match value {
                             "object" => Ok(Field::Object),
                             "nodes" => Ok(Field::Nodes),
@@ -226,7 +224,6 @@ impl<'de> Deserialize<'de> for Node {
                 let mut nodes = None;
                 let mut leaves = None;
                 while let Some(key) = map.next_key()? {
-                    println!("key: {:?}", key);
                     match key {
                         Field::Object => {
                             if object.is_some() {
@@ -252,7 +249,6 @@ impl<'de> Deserialize<'de> for Node {
                     }
                 }
                 let object: String = object.ok_or_else(|| de::Error::missing_field("object"))?;
-                println!("object: {:?}", object);
                 match object.as_str() {
                     "document" => {
                         let nodes = nodes.ok_or_else(|| de::Error::missing_field("nodes"))?;
