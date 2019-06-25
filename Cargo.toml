@@ -8,6 +8,7 @@ description = "slatejs schema for rust"
 homepage = "https://github.com/nottxy/slater"
 repository = "https://github.com/nottxy/slater"
 documentation = "https://docs.rs/slater"
+edition = "2018"
 
 [dependencies]
 serde = "1.0"

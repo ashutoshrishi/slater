@@ -251,17 +251,17 @@ impl<'de> Deserialize<'de> for Node {
                 let object: String = object.ok_or_else(|| de::Error::missing_field("object"))?;
                 match object.as_str() {
                     "document" => {
-                        let nodes = nodes.ok_or_else(|| de::Error::missing_field("nodes"))?;
+                        let nodes = nodes.unwrap_or(Vec::new());
                         let document = Document { nodes };
                         Ok(Node::Document(document))
                     }
                     "block" => {
-                        let nodes = nodes.ok_or_else(|| de::Error::missing_field("nodes"))?;
+                        let nodes = nodes.unwrap_or(Vec::new());
                         let block = Block { nodes };
                         Ok(Node::Block(block))
                     }
                     "inline" => {
-                        let nodes = nodes.ok_or_else(|| de::Error::missing_field("nodes"))?;
+                        let nodes = nodes.unwrap_or(Vec::new());
                         let inline = Inline { nodes };
                         Ok(Node::Inline(inline))
                     }
@@ -418,6 +418,22 @@ mod tests {
         "nodes": [
           {
             "object": "text",
+            "leaves": [
+              {
+                "object": "leaf",
+                "text": "",
+                "marks": []
+              }
+            ]
+          },
+          {
+            "object": "inline",
+            "isVoid": true,
+            "type": "metadata",
+            "data": {
+              "count": 40,
+              "type": "highlighted"
+            },
             "leaves": [
               {
                 "object": "leaf",
